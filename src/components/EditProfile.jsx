@@ -2,13 +2,18 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/services/userService";
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-const EditProfile = ({ id, username, password, profileURL }) => {
+const EditProfile = ({ id, username, profileURL }) => {
   const [newUsername, setNewUsername] = useState(username);
   const [newPassword, setNewPassword] = useState("");
+  const [oldPassword, setOldPassword] = useState("");
   const [newProfileURL, setNewProfileURL] = useState(profileURL);
   const [editField, setEditField] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const router = useRouter();
 
   const handleEditClick = (field) => {
@@ -17,14 +22,15 @@ const EditProfile = ({ id, username, password, profileURL }) => {
 
   const handleSubmit = async (e, field) => {
     e.preventDefault();
+
     const updateData = {
-      [field]:
-        field === "profileURL"
-          ? newProfileURL
-          : field === "password"
-          ? newPassword
-          : newUsername,
+      [field]: field === "profileURL" ? newProfileURL : newUsername,
     };
+
+    if (field === "password") {
+      updateData.oldPassword = oldPassword;
+      updateData.newPassword = newPassword;
+    }
 
     try {
       const res = await fetch(`http://localhost:3000/api/users/${id}`, {
@@ -34,17 +40,19 @@ const EditProfile = ({ id, username, password, profileURL }) => {
         },
         body: JSON.stringify(updateData),
       });
-
+      setErrorMessage(null);
       if (!res.ok) {
-        throw new Error(`Failed to update ${field}`);
+        const errorResponse = await res.json();
+        throw new Error(errorResponse.message || `Failed to update ${field}`);
       }
-
-      console.log(`${field} updated successfully`);
+      toast.success(`${field} updated successfully`);
     } catch (error) {
-      console.error(`Error updating ${field}:`, error);
-      setErrorMessage(`Error updating ${field}: ${error.message}`);
+      setErrorMessage("Old password is incorrect");
+      toast.error(error.message);
     } finally {
       setEditField(null);
+      setNewPassword("");
+      setOldPassword("");
     }
   };
 
@@ -56,20 +64,26 @@ const EditProfile = ({ id, username, password, profileURL }) => {
     try {
       const res = await fetch(`http://localhost:3000/api/users/${id}`, {
         method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ password: deletePassword }),
       });
-
+      setErrorMessage(null);
       if (!res.ok) {
-        throw new Error("Failed to delete account");
+        const errorResponse = await res.json();
+        throw new Error(errorResponse.message || "Failed to delete account");
       } else {
-        const result = await logout();
+        await logout();
+        toast.success("Account deleted successfully");
       }
 
-      console.log("Account deleted successfully");
       router.push("/goodbye");
     } catch (error) {
       console.error("Error deleting account:", error);
       setErrorMessage(`Error deleting account: ${error.message}`);
-    }
+      toast.error(error.message);
+    } 
   };
 
   return (
@@ -137,7 +151,7 @@ const EditProfile = ({ id, username, password, profileURL }) => {
         <div className="mb-6">
           <button
             className="w-full px-4 py-2 font-bold text-white bg-red-500 rounded hover:bg-red-700 focus:outline-none focus:shadow-outline"
-            onClick={handleDeleteAccount}
+            onClick={() => setShowDeleteConfirmation(true)}
           >
             Delete Account
           </button>
@@ -175,22 +189,44 @@ const EditProfile = ({ id, username, password, profileURL }) => {
                 )}
 
                 {editField === "password" && (
-                  <div className="mb-4">
-                    <label
-                      className="block mb-2 text-sm font-bold text-gray-300"
-                      htmlFor="newPassword"
-                    >
-                      New Password
-                    </label>
-                    <input
-                      className="w-full px-3 py-2 leading-tight text-gray-200 bg-gray-900 border border-gray-700 rounded shadow appearance-none focus:outline-none focus:shadow-outline"
-                      id="newPassword"
-                      type="password"
-                      placeholder="New Password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                    />
-                  </div>
+                  <>
+                    <div className="mb-4">
+                      <label
+                        className="block mb-2 text-sm font-bold text-gray-300"
+                        htmlFor="oldPassword"
+                      >
+                        Old Password
+                      </label>
+                      <input
+                        className="w-full px-3 py-2 leading-tight text-gray-200 bg-gray-900 border border-gray-700 rounded shadow appearance-none focus:outline-none focus:shadow-outline"
+                        id="oldPassword"
+                        type="password"
+                        placeholder="Old Password"
+                        value={oldPassword}
+                        onChange={(e) => {
+                          setOldPassword(e.target.value);
+                          setErrorMessage(null); // Reset error message
+                        }}
+                      />
+                    </div>
+
+                    <div className="mb-4">
+                      <label
+                        className="block mb-2 text-sm font-bold text-gray-300"
+                        htmlFor="newPassword"
+                      >
+                        New Password
+                      </label>
+                      <input
+                        className="w-full px-3 py-2 leading-tight text-gray-200 bg-gray-900 border border-gray-700 rounded shadow appearance-none focus:outline-none focus:shadow-outline"
+                        id="newPassword"
+                        type="password"
+                        placeholder="New Password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                    </div>
+                  </>
                 )}
 
                 {editField === "profileURL" && (
@@ -224,6 +260,61 @@ const EditProfile = ({ id, username, password, profileURL }) => {
               <button
                 className="absolute top-0 right-0 p-2 m-4 text-gray-300 hover:text-white focus:outline-none"
                 onClick={handleCloseEdit}
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showDeleteConfirmation && (
+          <div className="fixed inset-0 z-10 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="relative w-full max-w-md p-8 bg-gray-800 rounded-lg shadow-lg">
+              <h2 className="mb-6 text-2xl font-bold text-center text-white">
+                Confirm Deletion
+              </h2>
+              <div className="mb-4">
+                <label
+                  className="block mb-2 text-sm font-bold text-gray-300"
+                  htmlFor="deletePassword"
+                >
+                  Password
+                </label>
+                <input
+                  className="w-full px-3 py-2 leading-tight text-gray-200 bg-gray-900 border border-gray-700 rounded shadow appearance-none focus:outline-none focus:shadow-outline"
+                  id="deletePassword"
+                  type="password"
+                  placeholder="Password"
+                  value={deletePassword}
+                  onChange={(e) => {
+                    setDeletePassword(e.target.value);
+                    setErrorMessage(null); // Reset error message
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-center">
+                <button
+                  className="w-full px-4 py-2 font-bold text-white bg-red-500 rounded hover:bg-red-700 focus:outline-none focus:shadow-outline"
+                  onClick={handleDeleteAccount}
+                >
+                  Confirm Delete
+                </button>
+              </div>
+              <button
+                className="absolute top-0 right-0 p-2 m-4 text-gray-300 hover:text-white focus:outline-none"
+                onClick={() => setShowDeleteConfirmation(false)}
               >
                 <svg
                   className="w-6 h-6"
